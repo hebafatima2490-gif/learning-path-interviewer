@@ -79,11 +79,9 @@ export const Route = createFileRoute("/api/interview")({
             return json({ error: "message is required" }, 400);
           }
           if (session.done) {
-            return json({
-              reply: "Interview completed.",
-              done: true,
-              feedback: session.feedback,
-            } satisfies InterviewResponse);
+            const res: InterviewResponse = { reply: "Interview completed.", done: true };
+            if (session.feedback) res.feedback = session.feedback;
+            return json(res);
           }
 
           const message = body.message.trim().slice(0, 8000);
