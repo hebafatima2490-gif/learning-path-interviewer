@@ -309,9 +309,13 @@ IMPORTANT: your previous attempt asked a question too close to one already asked
   });
   s.answered += 1;
 
+  if (!out.reply?.trim()) {
+    throw new AiStreamError("The AI returned an empty response. Please send your answer again.", 502);
+  }
   registerQuestion(s, out.question, out.day);
   s.transcript.push({ role: "assistant", content: out.reply });
   return out.reply;
+
 }
 
 function registerQuestion(s: Session, text: string, day: number) {
