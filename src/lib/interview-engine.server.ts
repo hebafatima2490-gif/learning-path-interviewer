@@ -131,18 +131,53 @@ export class AiStreamError extends Error {
   }
 }
 
+function collectErrorInfo(err: unknown, depth = 0): { text: string; status?: number | undefined } {
+  if (!err || depth > 6) return { text: "" };
+  if (typeof err !== "object") return { text: String(err) };
+  const e = err as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof e['message'] === "string") parts.push(e['message']);
+  if (typeof e['responseBody'] === "string") parts.push(e['responseBody']);
+  let status =
+    typeof e['statusCode'] === "number"
+      ? (e['statusCode'] as number)
+      : typeof e['status'] === "number"
+        ? (e['status'] as number)
+        : undefined;
+
+  for (const key of ["cause", "error", "lastError"] as const) {
+    const nested = collectErrorInfo(e[key], depth + 1);
+    if (nested.text) parts.push(nested.text);
+    if (!status && nested.status) status = nested.status;
+  }
+  if (Array.isArray(e['errors'])) {
+    for (const sub of e['errors']) {
+      const nested = collectErrorInfo(sub, depth + 1);
+      if (nested.text) parts.push(nested.text);
+      if (!status && nested.status) status = nested.status;
+    }
+  }
+  return { text: parts.join(" | "), status };
+}
+
 function friendlyAiError(err: unknown): AiStreamError {
-  const raw = err instanceof Error ? err.message : String(err);
-  if (/429|rate.?limit/i.test(raw)) {
+  const { text: raw, status } = collectErrorInfo(err);
+  if (status === 429 || /429|rate.?limit|too many requests/i.test(raw)) {
     return new AiStreamError(
       "The AI service is rate limited right now. Wait a few seconds and send your answer again.",
       429,
     );
   }
-  if (/402|credit|quota|billing/i.test(raw)) {
+  if (status === 402 || /402|payment required|credit|quota|billing/i.test(raw)) {
     return new AiStreamError(
-      "AI credits are exhausted. Add credits to continue the interview.",
+      "AI credits are exhausted for this workspace. Add credits in Settings → Workspace → Usage to continue the interview.",
       402,
+    );
+  }
+  if (status === 401 || status === 403) {
+    return new AiStreamError(
+      "The AI service rejected the request (authentication problem). Please try again later.",
+      502,
     );
   }
   if (/timeout|aborted|ECONNRESET|fetch failed|network/i.test(raw)) {
@@ -152,13 +187,15 @@ function friendlyAiError(err: unknown): AiStreamError {
     );
   }
   return new AiStreamError(
-    `The AI service couldn't complete that response. Please try again. (${raw.slice(0, 200)})`,
+    `The AI service couldn't complete that response. Please try again.${raw ? ` (${raw.slice(0, 200)})` : ""}`,
     502,
   );
 }
 
+
 async function generate<T>(schema: z.ZodType<T>, system: string, prompt: string): Promise<T> {
   let output: unknown;
+  let streamError: unknown;
   try {
     const lovable = provider();
     const result = streamText({
@@ -167,13 +204,17 @@ async function generate<T>(schema: z.ZodType<T>, system: string, prompt: string)
       prompt,
       output: Output.object({ schema }),
       providerOptions: { openai: { store: false } },
+      onError: ({ error }) => {
+        streamError = error;
+      },
     });
     // consume the stream so a mid-stream failure surfaces here, not silently
     output = await result.output;
   } catch (err) {
-    console.error("AI stream failed:", err);
-    throw friendlyAiError(err);
+    console.error("AI stream failed:", streamError ?? err);
+    throw friendlyAiError(streamError ?? err);
   }
+
 
   const parsed = schema.safeParse(output);
   if (!parsed.success) {
