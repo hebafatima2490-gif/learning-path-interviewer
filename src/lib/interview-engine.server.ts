@@ -122,17 +122,70 @@ function provider() {
   });
 }
 
-async function generate<T>(schema: z.ZodType<T>, system: string, prompt: string): Promise<T> {
-  const lovable = provider();
-  const result = streamText({
-    model: lovable.responses(MODEL),
-    system,
-    prompt,
-    output: Output.object({ schema }),
-    providerOptions: { openai: { store: false } },
-  });
-  return (await result.output) as T;
+export class AiStreamError extends Error {
+  status: number;
+  constructor(message: string, status = 502) {
+    super(message);
+    this.name = "AiStreamError";
+    this.status = status;
+  }
 }
+
+function friendlyAiError(err: unknown): AiStreamError {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (/429|rate.?limit/i.test(raw)) {
+    return new AiStreamError(
+      "The AI service is rate limited right now. Wait a few seconds and send your answer again.",
+      429,
+    );
+  }
+  if (/402|credit|quota|billing/i.test(raw)) {
+    return new AiStreamError(
+      "AI credits are exhausted. Add credits to continue the interview.",
+      402,
+    );
+  }
+  if (/timeout|aborted|ECONNRESET|fetch failed|network/i.test(raw)) {
+    return new AiStreamError(
+      "The connection to the AI service dropped mid-response. Please send your answer again.",
+      504,
+    );
+  }
+  return new AiStreamError(
+    `The AI service couldn't complete that response. Please try again. (${raw.slice(0, 200)})`,
+    502,
+  );
+}
+
+async function generate<T>(schema: z.ZodType<T>, system: string, prompt: string): Promise<T> {
+  let output: unknown;
+  try {
+    const lovable = provider();
+    const result = streamText({
+      model: lovable.responses(MODEL),
+      system,
+      prompt,
+      output: Output.object({ schema }),
+      providerOptions: { openai: { store: false } },
+    });
+    // consume the stream so a mid-stream failure surfaces here, not silently
+    output = await result.output;
+  } catch (err) {
+    console.error("AI stream failed:", err);
+    throw friendlyAiError(err);
+  }
+
+  const parsed = schema.safeParse(output);
+  if (!parsed.success) {
+    console.error("AI returned unusable output:", JSON.stringify(output)?.slice(0, 500));
+    throw new AiStreamError(
+      "The AI returned an empty or malformed response. Please try again.",
+      502,
+    );
+  }
+  return parsed.data;
+}
+
 
 /* ------------------------------- prompt parts ------------------------------ */
 
