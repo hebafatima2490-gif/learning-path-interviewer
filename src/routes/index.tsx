@@ -52,16 +52,29 @@ function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = (await res.json()) as InterviewResponse & { error?: string };
-    if (!res.ok) {
+    const raw = await res.text();
+    let data: InterviewResponse & { error?: string };
+    try {
+      data = JSON.parse(raw) as InterviewResponse & { error?: string };
+    } catch {
       throw new Error(
-        res.status === 429
-          ? "Rate limit reached — wait a few seconds and send your answer again."
-          : res.status === 402
-            ? "AI credits exhausted. Add credits to continue the interview."
-            : (data.error ?? "Something went wrong. Please try again."),
+        res.ok
+          ? "The server returned an unreadable response. Please try again."
+          : `The interview service is unavailable right now (HTTP ${res.status}). Please try again.`,
       );
     }
+
+    if (!res.ok) {
+      throw new Error(
+        data.error ??
+          (res.status === 429
+            ? "Rate limit reached — wait a few seconds and send your answer again."
+            : res.status === 402
+              ? "AI credits exhausted. Add credits to continue the interview."
+              : "Something went wrong. Please try again."),
+      );
+    }
+
     return data;
   }
 
