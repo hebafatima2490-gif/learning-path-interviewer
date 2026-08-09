@@ -55,13 +55,15 @@ function Home() {
     const data = (await res.json()) as InterviewResponse & { error?: string };
     if (!res.ok) {
       throw new Error(
-        res.status === 429
-          ? "Rate limit reached — wait a few seconds and send your answer again."
-          : res.status === 402
-            ? "AI credits exhausted. Add credits to continue the interview."
-            : (data.error ?? "Something went wrong. Please try again."),
+        data.error ??
+          (res.status === 429
+            ? "Rate limit reached — wait a few seconds and send your answer again."
+            : res.status === 402
+              ? "AI credits exhausted. Add credits to continue the interview."
+              : "Something went wrong. Please try again."),
       );
     }
+
     return data;
   }
 
