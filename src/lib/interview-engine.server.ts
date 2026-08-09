@@ -131,7 +131,7 @@ export class AiStreamError extends Error {
   }
 }
 
-function collectErrorInfo(err: unknown, depth = 0): { text: string; status?: number } {
+function collectErrorInfo(err: unknown, depth = 0): { text: string; status?: number | undefined } {
   if (!err || depth > 6) return { text: "" };
   if (typeof err !== "object") return { text: String(err) };
   const e = err as Record<string, unknown>;
