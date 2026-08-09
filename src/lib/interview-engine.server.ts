@@ -1,5 +1,5 @@
 import { streamText, Output } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import curriculum from "@/data/curriculum.json";
 import type {
@@ -11,7 +11,7 @@ import type {
   Session,
 } from "@/lib/interview-types";
 
-const MODEL = "openai/gpt-5.6-sol";
+const MODEL = "claude-sonnet-4-5";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 2; // 2 hours
 const MIN_QUESTIONS = 8;
 const MIN_DAYS = 4;
@@ -113,13 +113,14 @@ export function tooSimilar(q: string, asked: string[]) {
 }
 
 function provider() {
-  const key = process.env["LOVABLE_API_KEY"];
-  if (!key) throw new Error("Missing LOVABLE_API_KEY");
-  return createOpenAI({
-    baseURL: "https://ai.gateway.lovable.dev/v1",
-    apiKey: key,
-    headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
-  });
+  const key = process.env["ANTHROPIC_API_KEY"];
+  if (!key) {
+    throw new AiStreamError(
+      "The Anthropic API key is not configured on the server. Add ANTHROPIC_API_KEY to continue.",
+      500,
+    );
+  }
+  return createAnthropic({ apiKey: key });
 }
 
 export class AiStreamError extends Error {
@@ -168,15 +169,15 @@ function friendlyAiError(err: unknown): AiStreamError {
       429,
     );
   }
-  if (status === 402 || /402|payment required|credit|quota|billing/i.test(raw)) {
+  if (status === 402 || /402|payment required|credit_balance_too_low|credit|quota|billing/i.test(raw)) {
     return new AiStreamError(
-      "AI credits are exhausted for this workspace. Add credits in Settings → Workspace → Usage to continue the interview.",
+      "Your Anthropic account is out of credit. Top up your balance at console.anthropic.com to continue the interview.",
       402,
     );
   }
   if (status === 401 || status === 403) {
     return new AiStreamError(
-      "The AI service rejected the request (authentication problem). Please try again later.",
+      "Anthropic rejected the request — the ANTHROPIC_API_KEY looks invalid or lacks access to this model.",
       502,
     );
   }
@@ -197,13 +198,12 @@ async function generate<T>(schema: z.ZodType<T>, system: string, prompt: string)
   let output: unknown;
   let streamError: unknown;
   try {
-    const lovable = provider();
+    const anthropic = provider();
     const result = streamText({
-      model: lovable.responses(MODEL),
+      model: anthropic(MODEL),
       system,
       prompt,
       output: Output.object({ schema }),
-      providerOptions: { openai: { store: false } },
       onError: ({ error }) => {
         streamError = error;
       },
