@@ -238,9 +238,13 @@ ${planBlock(s.plan)}
 Greet the candidate by first name in one short sentence, set expectations in one more sentence (a short conversational interview about what they built in the cohort), then ask your FIRST question about one of the planned days.
 "reply" = the full spoken turn including the question. "question" = just the question sentence. "day" = the curriculum day number it targets.`,
   );
+  if (!out.reply?.trim()) {
+    throw new AiStreamError("The AI returned an empty opening message. Please try again.", 502);
+  }
   registerQuestion(s, out.question, out.day);
   s.transcript.push({ role: "assistant", content: out.reply });
   return out.reply;
+
 }
 
 const turnSchema = z.object({
