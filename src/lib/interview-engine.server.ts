@@ -195,6 +195,7 @@ function friendlyAiError(err: unknown): AiStreamError {
 
 async function generate<T>(schema: z.ZodType<T>, system: string, prompt: string): Promise<T> {
   let output: unknown;
+  let streamError: unknown;
   try {
     const lovable = provider();
     const result = streamText({
@@ -203,13 +204,17 @@ async function generate<T>(schema: z.ZodType<T>, system: string, prompt: string)
       prompt,
       output: Output.object({ schema }),
       providerOptions: { openai: { store: false } },
+      onError: ({ error }) => {
+        streamError = error;
+      },
     });
     // consume the stream so a mid-stream failure surfaces here, not silently
     output = await result.output;
   } catch (err) {
-    console.error("AI stream failed:", err);
-    throw friendlyAiError(err);
+    console.error("AI stream failed:", streamError ?? err);
+    throw friendlyAiError(streamError ?? err);
   }
+
 
   const parsed = schema.safeParse(output);
   if (!parsed.success) {
