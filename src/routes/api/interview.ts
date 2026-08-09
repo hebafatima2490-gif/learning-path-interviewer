@@ -151,9 +151,20 @@ export const Route = createFileRoute("/api/interview")({
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error("interview error:", msg);
-          const status = /429|rate limit/i.test(msg) ? 429 : /402|credit/i.test(msg) ? 402 : 500;
+          const tagged =
+            err && typeof err === "object" && "status" in err
+              ? Number((err as { status: unknown }).status)
+              : NaN;
+          const status = Number.isFinite(tagged)
+            ? tagged
+            : /429|rate limit/i.test(msg)
+              ? 429
+              : /402|credit/i.test(msg)
+                ? 402
+                : 500;
           return json({ error: msg }, status);
         }
+
       },
     },
   },
