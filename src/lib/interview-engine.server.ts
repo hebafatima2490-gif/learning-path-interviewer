@@ -1,5 +1,5 @@
 import { streamText, Output } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import curriculum from "@/data/curriculum.json";
 import type {
@@ -11,7 +11,7 @@ import type {
   Session,
 } from "@/lib/interview-types";
 
-const MODEL = "openai/gpt-5.6-sol";
+const MODEL = "claude-sonnet-4-5";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 2; // 2 hours
 const MIN_QUESTIONS = 8;
 const MIN_DAYS = 4;
@@ -113,13 +113,14 @@ export function tooSimilar(q: string, asked: string[]) {
 }
 
 function provider() {
-  const key = process.env["LOVABLE_API_KEY"];
-  if (!key) throw new Error("Missing LOVABLE_API_KEY");
-  return createOpenAI({
-    baseURL: "https://ai.gateway.lovable.dev/v1",
-    apiKey: key,
-    headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
-  });
+  const key = process.env["ANTHROPIC_API_KEY"];
+  if (!key) {
+    throw new AiStreamError(
+      "The Anthropic API key is not configured on the server. Add ANTHROPIC_API_KEY to continue.",
+      500,
+    );
+  }
+  return createAnthropic({ apiKey: key });
 }
 
 export class AiStreamError extends Error {
