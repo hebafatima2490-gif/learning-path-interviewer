@@ -169,9 +169,9 @@ function friendlyAiError(err: unknown): AiStreamError {
       429,
     );
   }
-  if (status === 402 || /402|payment required|credit|quota|billing/i.test(raw)) {
+  if (status === 402 || /402|payment required|credit_balance_too_low|credit|quota|billing/i.test(raw)) {
     return new AiStreamError(
-      "AI credits are exhausted for this workspace. Add credits in Settings → Workspace → Usage to continue the interview.",
+      "Your Anthropic account is out of credit. Top up your balance at console.anthropic.com to continue the interview.",
       402,
     );
   }
@@ -198,13 +198,12 @@ async function generate<T>(schema: z.ZodType<T>, system: string, prompt: string)
   let output: unknown;
   let streamError: unknown;
   try {
-    const lovable = provider();
+    const anthropic = provider();
     const result = streamText({
-      model: lovable.responses(MODEL),
+      model: anthropic(MODEL),
       system,
       prompt,
       output: Output.object({ schema }),
-      providerOptions: { openai: { store: false } },
       onError: ({ error }) => {
         streamError = error;
       },
