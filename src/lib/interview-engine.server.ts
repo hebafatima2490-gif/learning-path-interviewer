@@ -177,7 +177,7 @@ function friendlyAiError(err: unknown): AiStreamError {
   }
   if (status === 401 || status === 403) {
     return new AiStreamError(
-      "The AI service rejected the request (authentication problem). Please try again later.",
+      "Anthropic rejected the request — the ANTHROPIC_API_KEY looks invalid or lacks access to this model.",
       502,
     );
   }
