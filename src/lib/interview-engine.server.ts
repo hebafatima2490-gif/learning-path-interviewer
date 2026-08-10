@@ -110,15 +110,15 @@ export function tooSimilar(q: string, asked: string[]) {
   return false;
 }
 
-function provider() {
-  const key = process.env["ANTHROPIC_API_KEY"];
+function apiKey() {
+  const key = process.env["GEMINI_API_KEY"];
   if (!key) {
     throw new AiStreamError(
-      "The Anthropic API key is not configured on the server. Add ANTHROPIC_API_KEY to continue.",
+      "The Gemini API key is not configured on the server. Add GEMINI_API_KEY to continue.",
       500,
     );
   }
-  return createAnthropic({ apiKey: key });
+  return key;
 }
 
 export class AiStreamError extends Error {
@@ -167,15 +167,15 @@ function friendlyAiError(err: unknown): AiStreamError {
       429,
     );
   }
-  if (status === 402 || /402|payment required|credit_balance_too_low|credit|quota|billing/i.test(raw)) {
+  if (status === 402 || /402|payment required|quota|billing|exceeded your current quota/i.test(raw)) {
     return new AiStreamError(
-      "Your Anthropic account is out of credit. Top up your balance at console.anthropic.com to continue the interview.",
+      "Your Google AI account has no remaining quota. Check billing in Google AI Studio to continue the interview.",
       402,
     );
   }
   if (status === 401 || status === 403) {
     return new AiStreamError(
-      "Anthropic rejected the request — the ANTHROPIC_API_KEY looks invalid or lacks access to this model.",
+      "Google rejected the request — the GEMINI_API_KEY looks invalid or lacks access to this model.",
       502,
     );
   }
@@ -192,27 +192,67 @@ function friendlyAiError(err: unknown): AiStreamError {
 }
 
 
-async function generate<T>(schema: z.ZodType<T>, system: string, prompt: string): Promise<T> {
-  let output: unknown;
-  let streamError: unknown;
+type GeminiSchema = Record<string, unknown>;
+
+const GEMINI_URL = (model: string) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+async function generate<T>(
+  schema: z.ZodType<T>,
+  responseSchema: GeminiSchema,
+  system: string,
+  prompt: string,
+): Promise<T> {
+  let text: string;
   try {
-    const anthropic = provider();
-    const result = streamText({
-      model: anthropic(MODEL),
-      system,
-      prompt,
-      output: Output.object({ schema }),
-      onError: ({ error }) => {
-        streamError = error;
+    const res = await fetch(GEMINI_URL(MODEL), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey(),
       },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema,
+          temperature: 0.8,
+        },
+      }),
     });
-    // consume the stream so a mid-stream failure surfaces here, not silently
-    output = await result.output;
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`Gemini request failed [${res.status}]: ${body.slice(0, 500)}`);
+      throw friendlyAiError({ status: res.status, message: body });
+    }
+
+    const data = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+      promptFeedback?: unknown;
+    };
+    text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    if (!text.trim()) {
+      console.error("Gemini returned no text:", JSON.stringify(data).slice(0, 500));
+      throw new AiStreamError("The AI returned an empty response. Please try again.", 502);
+    }
   } catch (err) {
-    console.error("AI stream failed:", streamError ?? err);
-    throw friendlyAiError(streamError ?? err);
+    if (err instanceof AiStreamError) throw err;
+    console.error("Gemini request errored:", err);
+    throw friendlyAiError(err);
   }
 
+  let output: unknown;
+  try {
+    output = JSON.parse(text);
+  } catch {
+    console.error("Gemini returned malformed JSON:", text.slice(0, 500));
+    throw new AiStreamError(
+      "The AI returned an empty or malformed response. Please try again.",
+      502,
+    );
+  }
 
   const parsed = schema.safeParse(output);
   if (!parsed.success) {
