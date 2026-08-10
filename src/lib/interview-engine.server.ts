@@ -9,7 +9,7 @@ import type {
   Session,
 } from "@/lib/interview-types";
 
-const MODEL = "claude-sonnet-4-5";
+const MODEL = "gemini-2.5-flash";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 2; // 2 hours
 const MIN_QUESTIONS = 8;
 const MIN_DAYS = 4;
@@ -454,6 +454,17 @@ const feedbackSchema = z.object({
   next: z.array(z.string()),
 });
 
+const feedbackGemini: GeminiSchema = {
+  type: "object",
+  properties: {
+    summary: { type: "string" },
+    strengths: { type: "array", items: { type: "string" } },
+    gaps: { type: "array", items: { type: "string" } },
+    next: { type: "array", items: { type: "string" } },
+  },
+  required: ["summary", "strengths", "gaps", "next"],
+};
+
 export async function buildFeedback(s: Session): Promise<Feedback> {
   const detail = s.scores
     .map(
@@ -467,6 +478,7 @@ export async function buildFeedback(s: Session): Promise<Feedback> {
   const gen = () =>
     generate(
       feedbackSchema,
+      feedbackGemini,
       "You write blunt, specific, evidence-based interview debriefs for AI engineers. You only cite things the candidate actually said in this interview. Generic coaching language is unacceptable.",
       `Candidate: ${s.candidate.member.name}, ${s.candidate.member.jobRole}.
 
