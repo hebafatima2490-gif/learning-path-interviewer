@@ -399,11 +399,12 @@ Tasks:
 3. Produce your spoken turn: brief acknowledgement + exactly one new question.
 Progress: ${s.answered} answers given, ${s.coveredDays.length} distinct days covered. Minimum ${MIN_QUESTIONS} questions across ${MIN_DAYS} days; prioritise uncovered planned days if days covered is below ${MIN_DAYS}.`;
 
-  let out = await generate(turnSchema, personaSystem(), base);
+  let out = await generate(turnSchema, turnGemini, personaSystem(), base);
 
   if (tooSimilar(out.question, asked)) {
     out = await generate(
       turnSchema,
+      turnGemini,
       personaSystem(),
       `${base}
 
