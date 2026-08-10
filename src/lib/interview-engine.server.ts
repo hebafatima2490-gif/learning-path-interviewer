@@ -351,6 +351,29 @@ const turnSchema = z.object({
   day: z.number(),
 });
 
+const turnGemini: GeminiSchema = {
+  type: "object",
+  properties: {
+    rubric: {
+      type: "object",
+      properties: {
+        correctness: { type: "number" },
+        depth: { type: "number" },
+        specificity: { type: "number" },
+        communication: { type: "number" },
+      },
+      required: ["correctness", "depth", "specificity", "communication"],
+    },
+    note: { type: "string" },
+    isFollowUp: { type: "boolean" },
+    reply: { type: "string" },
+    question: { type: "string" },
+    day: { type: "integer" },
+  },
+  required: ["rubric", "note", "isFollowUp", "reply", "question", "day"],
+};
+
+
 export async function nextTurn(s: Session, message: string) {
   const asked = s.askedQuestions.map((q) => q.text);
   const current = s.askedQuestions[s.askedQuestions.length - 1];
