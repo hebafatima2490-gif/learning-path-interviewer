@@ -9,7 +9,7 @@ import type {
   Session,
 } from "@/lib/interview-types";
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.5-flash";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 2; // 2 hours
 const MIN_QUESTIONS = 8;
 const MIN_DAYS = 4;
