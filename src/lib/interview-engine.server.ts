@@ -305,9 +305,20 @@ const openingSchema = z.object({
   day: z.number(),
 });
 
+const openingGemini: GeminiSchema = {
+  type: "object",
+  properties: {
+    reply: { type: "string" },
+    question: { type: "string" },
+    day: { type: "integer" },
+  },
+  required: ["reply", "question", "day"],
+};
+
 export async function openInterview(s: Session) {
   const out = await generate(
     openingSchema,
+    openingGemini,
     personaSystem(),
     `${candidateBlock(s.candidate)}
 
