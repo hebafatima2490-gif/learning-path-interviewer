@@ -1,5 +1,3 @@
-import { streamText, Output } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import curriculum from "@/data/curriculum.json";
 import type {
